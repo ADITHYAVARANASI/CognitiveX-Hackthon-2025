@@ -1,202 +1,189 @@
 import streamlit as st
-import requests
-import random
+import google.generativeai as genai
 import PyPDF2
+import os
+import random
+import requests
+from datetime import datetime
 
-# Load Gemini API key from secrets.toml
+# Load Gemini API key securely
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+genai.configure(api_key=GEMINI_API_KEY)
 
-# Set page config
-st.set_page_config(page_title="💸 FinBot - Your Finance Assistant", layout="wide")
+# Set up page configuration
+st.set_page_config(page_title="FinAssist AI", layout="wide")
 
-# --- Theme Toggle ---
-theme = st.sidebar.radio("🌗 Choose Theme:", ["Neon Dark", "Neon Light"])
+# Light/Dark Neon Theme Toggle
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = True
 
-if theme == "Neon Dark":
-    neon_css = """
+toggle = st.sidebar.checkbox("🌗 Toggle Neon Mode", value=st.session_state.dark_mode)
+st.session_state.dark_mode = toggle
+theme = "dark" if toggle else "light"
+bg_color = "#0f0f0f" if theme == "dark" else "#f9f9f9"
+text_color = "#39FF14" if theme == "dark" else "#000000"
+
+# Apply custom style
+st.markdown(f"""
     <style>
-        body, .main {
-            background-color: #0d1117;
-            color: #c0f7ff;
-        }
-        h1, h2, h3, h4, h5 {
-            color: #00ffff;
-        }
-        .stButton>button {
-            background-color: #00ffff;
-            color: #000000;
-            font-weight: 600;
-            border-radius: 12px;
-            box-shadow: 0 0 10px #00ffff;
-        }
-        .stTextInput>div>input, .stSelectbox select, .stTextArea textarea {
-            background-color: #121821;
-            color: #c0f7ff;
-            border-radius: 8px;
-            border: 1px solid #00ffff;
-        }
+    body {{ background-color: {bg_color}; color: {text_color}; }}
+    .stApp {{ background-color: {bg_color}; color: {text_color}; }}
     </style>
-    """
-else:
-    neon_css = """
-    <style>
-        body, .main {
-            background-color: #f5faff;
-            color: #002b36;
-        }
-        h1, h2, h3, h4, h5 {
-            color: #0077cc;
-        }
-        .stButton>button {
-            background-color: #0077cc;
-            color: #ffffff;
-            font-weight: 600;
-            border-radius: 12px;
-        }
-        .stTextInput>div>input, .stSelectbox select, .stTextArea textarea {
-            background-color: #ffffff;
-            color: #002b36;
-            border-radius: 8px;
-            border: 1px solid #0077cc;
-        }
-    </style>
-    """
-st.markdown(neon_css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# --- Gemini API Call ---
-def call_gemini_api(prompt):
+# Sidebar Navigation
+st.sidebar.title("📊 FinAssist Menu")
+section = st.sidebar.radio("Choose a feature:", [
+    "🤖 Chatbot", "📄 PDF Summarizer", "🧮 Tax Calculator", "🏦 EMI Calculator",
+    "💰 FD Calculator", "📚 Finance Tips", "🧠 Fun Facts", "ℹ️ About"
+])
+
+# GPT-style Chatbot using Hugging Face (IBM model)
+if section == "🤖 Chatbot":
+    st.title("💬 FinAssist AI Chatbot")
+    st.caption("Powered by IBM Granite - Ask any finance-related question!")
+
+    HF_API_KEY = "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"  # replace with your own if needed
     headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {GEMINI_API_KEY}"
+        "Authorization": f"Bearer {HF_API_KEY}",
+        "Content-Type": "application/json"
     }
-    body = {
-        "prompt": {
-            "messages": [
-                {"author": "user", "content": {"text": prompt}}
-            ]
-        },
-        "temperature": 0.7,
-        "maxOutputTokens": 512
-    }
-    url = "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage"
-    response = requests.post(url, headers=headers, json=body)
-    response.raise_for_status()
-    data = response.json()
-    return data["candidates"][0]["message"]["content"]["text"]
 
-# --- Data ---
-finance_tips = [
-    "Always spend less than you earn.",
-    "Invest early to take advantage of compound interest.",
-    "Maintain an emergency fund of 3-6 months of expenses.",
-    "Use budgeting apps to track and control spending.",
-    "Learn the difference between good and bad debt.",
-]
+    model = "ibm-granite/granite-3b-instruct-v1"
+    user_input = st.text_input("💡 Ask me anything about finance...")
 
-fun_facts = [
-    "The first credit card was introduced in 1950 by Diners Club.",
-    "Compound interest was described by Einstein as the 8th wonder of the world.",
-    "The average millionaire has 7 streams of income.",
-    "Roth IRA accounts allow for tax-free withdrawals in retirement.",
-    "UPI handles over 10 billion transactions monthly!",
-]
+    if st.button("Send") and user_input:
+        with st.spinner("Thinking..."):
+            payload = {
+                "inputs": user_input,
+                "parameters": {"max_new_tokens": 150}
+            }
+            response = requests.post(
+                f"https://api-inference.huggingface.co/models/{model}",
+                headers=headers,
+                json=payload
+            )
+            result = response.json()
+            if "error" in result:
+                st.error("❌ Error: " + result["error"])
+            else:
+                answer = result[0]["generated_text"].split(user_input)[-1]
+                st.success("🧠 FinAssist Says:")
+                st.write(answer)
 
-# --- Header ---
-st.title("💸 FinBot - Your Finance Assistant")
+# PDF Upload + Gemini Summarizer
+elif section == "📄 PDF Summarizer":
+    st.title("📄 Upload PDF for Summary")
+    uploaded_file = st.file_uploader("Choose a PDF file", type="pdf")
 
-# --- Tabs ---
-tabs = st.tabs(["🤖 AI Chatbot", "📄 PDF Summarizer", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
+    if uploaded_file is not None:
+        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() or ""
 
-# --- 🤖 AI Chatbot ---
-with tabs[0]:
-    st.subheader("Ask your personal finance questions!")
-    user_question = st.text_area("Enter your question:", height=120)
-    if st.button("Get AI Advice"):
-        if user_question.strip():
-            with st.spinner("Thinking..."):
-                try:
-                    answer = call_gemini_api(user_question)
-                    st.success(answer)
-                except Exception as e:
-                    st.error(f"API Error: {e}")
+        st.subheader("🔍 PDF Content Extracted:")
+        st.text_area("📘 Extracted Text", text, height=200)
+
+        if st.button("🧠 Summarize with Gemini"):
+            model = genai.GenerativeModel("gemini-pro")
+            response = model.generate_content(f"Summarize this financial/legal document:\n\n{text}")
+            st.subheader("📌 Summary:")
+            st.success(response.text)
+
+# Tax Calculator
+elif section == "🧮 Tax Calculator":
+    st.title("🧾 Tax Calculator (India - Old Regime)")
+    income = st.number_input("Enter your annual income (₹)", min_value=0)
+
+    if st.button("Calculate Tax"):
+        tax = 0
+        slabs = [(250000, 0), (500000, 0.05), (1000000, 0.2), (float('inf'), 0.3)]
+        prev_limit = 0
+        for limit, rate in slabs:
+            if income > limit:
+                tax += (limit - prev_limit) * rate
+                prev_limit = limit
+            else:
+                tax += (income - prev_limit) * rate
+                break
+        st.success(f"Estimated Tax Payable: ₹{tax:,.2f}")
+
+# EMI Calculator
+elif section == "🏦 EMI Calculator":
+    st.title("🏦 EMI Calculator")
+    loan_amount = st.number_input("Loan Amount (₹)", min_value=0.0)
+    interest_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
+    loan_tenure = st.number_input("Tenure (Years)", min_value=0.0)
+
+    if st.button("Calculate EMI"):
+        r = interest_rate / (12 * 100)
+        n = loan_tenure * 12
+        if r == 0:
+            emi = loan_amount / n
         else:
-            st.warning("Please enter a question.")
+            emi = loan_amount * r * ((1 + r)**n) / (((1 + r)**n) - 1)
+        st.success(f"Estimated Monthly EMI: ₹{emi:,.2f}")
 
-# --- 📄 PDF Summarizer ---
-with tabs[1]:
-    st.subheader("📄 Upload and Summarize PDF")
-    uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
-    if uploaded_file:
-        try:
-            pdf_reader = PyPDF2.PdfReader(uploaded_file)
-            text = ""
-            for page in pdf_reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted
-            if not text.strip():
-                st.warning("No readable text found in the PDF.")
-            else:
-                if st.button("Summarize PDF"):
-                    with st.spinner("Summarizing..."):
-                        try:
-                            summary = call_gemini_api("Summarize this document:\n" + text[:6000])
-                            st.success(summary)
-                        except Exception as e:
-                            st.error(f"Summarization Error: {e}")
-        except Exception as e:
-            st.error(f"File processing error: {e}")
+# FD Calculator
+elif section == "💰 FD Calculator":
+    st.title("💰 Fixed Deposit Calculator")
+    principal = st.number_input("Principal Amount (₹)", min_value=0.0)
+    rate = st.number_input("Interest Rate (%)", min_value=0.0)
+    years = st.number_input("Time Period (Years)", min_value=0.0)
+    frequency = st.selectbox("Compounding Frequency", ["Yearly", "Half-Yearly", "Quarterly", "Monthly"])
 
-# --- 📚 Learn Finance ---
-with tabs[2]:
-    st.subheader("📚 Financial Knowledge Hub")
-    if st.button("🔄 Refresh Tips"):
-        random.shuffle(finance_tips)
-    for tip in finance_tips[:10]:
-        st.markdown(f"✅ {tip}")
+    freq_map = {"Yearly": 1, "Half-Yearly": 2, "Quarterly": 4, "Monthly": 12}
+    n = freq_map[frequency]
 
-# --- 📊 Calculators ---
-with tabs[3]:
-    st.subheader("📊 Financial Calculators")
-    calc = st.selectbox("Choose a calculator:", ["Income Tax", "EMI", "Fixed Deposit"])
+    if st.button("Calculate FD Maturity"):
+        maturity = principal * ((1 + (rate / (n * 100))) ** (n * years))
+        st.success(f"Maturity Amount: ₹{maturity:,.2f}")
 
-    if calc == "Income Tax":
-        income = st.number_input("Enter your annual income (₹)", min_value=0)
-        if st.button("Calculate Tax", key="tax"):
-            tax = 0
-            if income <= 250000:
-                tax = 0
-            elif income <= 500000:
-                tax = (income - 250000) * 0.05
-            elif income <= 1000000:
-                tax = 12500 + (income - 500000) * 0.2
-            else:
-                tax = 112500 + (income - 1000000) * 0.3
-            st.success(f"Estimated Tax: ₹{tax:,.2f}")
-
-    elif calc == "EMI":
-        loan_amount = st.number_input("Loan Amount (₹)", min_value=0)
-        interest_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
-        tenure_months = st.number_input("Tenure (Months)", min_value=1)
-        if st.button("Calculate EMI", key="emi"):
-            r = interest_rate / (12 * 100)
-            emi = (loan_amount * r * ((1 + r) ** tenure_months)) / (((1 + r) ** tenure_months) - 1)
-            st.success(f"Monthly EMI: ₹{emi:,.2f}")
-
-    elif calc == "Fixed Deposit":
-        principal = st.number_input("Principal Amount (₹)", min_value=0)
-        fd_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0, value=6.5)
-        duration_years = st.number_input("Duration (Years)", min_value=1)
-        if st.button("Calculate Maturity", key="fd"):
-            maturity = principal * ((1 + fd_rate / 100) ** duration_years)
-            st.success(f"Maturity Amount: ₹{maturity:,.2f}")
-
-# --- 🎉 Fun Facts ---
-with tabs[4]:
-    st.subheader("🎉 Fun Financial Facts")
-    if st.button("🔄 Refresh Fact"):
-        st.session_state["fact"] = random.choice(fun_facts)
-    if "fact" not in st.session_state:
-        st.session_state["fact"] = random.choice(fun_facts)
-    st.info(st.session_state["fact"])
+# Finance Tips
+elif section == "📚 Finance Tips":
+    st.title("📚 Smart Finance Tips")
+    tips = [
+        "Create a monthly budget to track spending.",
+        "Start investing early to maximize compounding.",
+        "Keep an emergency fund worth 3–6 months of expenses.",
+        "Avoid high-interest debt like credit cards.",
+        "Use credit responsibly to build a good credit score.",
+        "Review your insurance coverage annually.",
+        "Invest in diversified assets like mutual funds or ETFs.",
+        "Automate savings and investments.",
+        "Track net worth regularly.",
+        "Don't chase quick profits—invest long-term."
+    ]
+    st.info(random.choice(tips))
     st.caption("🔁 Click refresh to see more!")
+
+# Fun Facts
+elif section == "🧠 Fun Facts":
+    st.title("💸 Financial Fun Facts")
+    facts = [
+        "The first paper currency was created in China 1,400 years ago.",
+        "Compound interest was referred to as the 8th wonder of the world by Einstein.",
+        "Warren Buffett made 99% of his wealth after his 50s.",
+        "India’s UPI handles billions of transactions every month.",
+        "Credit cards were invented in the 1950s.",
+        "The Indian Rupee symbol (₹) was officially adopted in 2010.",
+        "Bitcoin was the first decentralized cryptocurrency, launched in 2009."
+    ]
+    st.success(random.choice(facts))
+    st.caption("🔁 Click refresh to see more!")
+
+# About Section
+elif section == "ℹ️ About":
+    st.title("ℹ️ About FinAssist")
+    st.markdown("""
+    **FinAssist** is your AI-powered finance assistant, built with ❤️ using Streamlit, Gemini, and Hugging Face.
+    
+    **Features:**
+    - GPT-style AI finance chatbot (IBM Granite)
+    - Financial tools (Tax, EMI, FD)
+    - PDF financial document summarizer (Gemini)
+    - Tips, facts, and light/dark neon theme
+
+    _Developed for Hackathons, Startups, and Personal Finance Learners!_
+    """)
