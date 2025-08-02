@@ -1,18 +1,20 @@
 import streamlit as st
 import requests
 import random
+import PyPDF2
+import io
 
-# Load Gemini API key from Streamlit secrets
+# Load Gemini API key
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# Headers for Gemini API
+# Gemini API headers
 headers = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {GEMINI_API_KEY}"
 }
 
+# Function to call Gemini API
 def call_gemini_api(prompt):
-    """Call Gemini chat-bison-001 model API with user prompt."""
     body = {
         "prompt": {
             "messages": [
@@ -32,78 +34,90 @@ def call_gemini_api(prompt):
     data = response.json()
     return data["candidates"][0]["message"]["content"]["text"]
 
-# Financial facts and tips
-fun_facts = [
-    "The first credit card was introduced in 1950 by Diners Club.",
-    "Compound interest was described by Einstein as the 8th wonder of the world.",
-    "The average millionaire has 7 streams of income.",
-    "Roth IRA accounts allow for tax-free withdrawals in retirement.",
-    "UPI handles over 10 billion transactions monthly!",
-    # Add more facts here...
-]
+# Theme toggle
+theme = st.sidebar.radio("🌗 Choose Theme:", ["Neon Dark", "Neon Light"])
 
+# Apply theme
+if theme == "Neon Dark":
+    neon_css = """
+    <style>
+        body, .main {
+            background-color: #0d1117;
+            color: #c0f7ff;
+        }
+        h1, h2, h3, h4, h5 {
+            color: #00ffff;
+        }
+        .stButton>button {
+            background-color: #00ffff;
+            color: #000000;
+            font-weight: 600;
+            border-radius: 12px;
+            box-shadow: 0 0 10px #00ffff;
+        }
+        .stTextInput>div>input, .stSelectbox select, .stTextArea textarea {
+            background-color: #121821;
+            color: #c0f7ff;
+            border-radius: 8px;
+            border: 1px solid #00ffff;
+        }
+    </style>
+    """
+else:
+    neon_css = """
+    <style>
+        body, .main {
+            background-color: #f5faff;
+            color: #002b36;
+        }
+        h1, h2, h3, h4, h5 {
+            color: #0077cc;
+        }
+        .stButton>button {
+            background-color: #0077cc;
+            color: #ffffff;
+            font-weight: 600;
+            border-radius: 12px;
+        }
+        .stTextInput>div>input, .stSelectbox select, .stTextArea textarea {
+            background-color: #ffffff;
+            color: #002b36;
+            border-radius: 8px;
+            border: 1px solid #0077cc;
+        }
+    </style>
+    """
+
+st.markdown(neon_css, unsafe_allow_html=True)
+
+# Page setup
+st.set_page_config(page_title="FinBot - Your Finance Assistant", layout="wide")
+st.title("💸 FinBot - Your Finance Assistant")
+
+# Tabs
+tabs = st.tabs(["🤖 AI Chatbot", "📄 PDF Summarizer", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
+
+# Financial tips and facts
 finance_tips = [
     "Always spend less than you earn.",
     "Invest early to take advantage of compound interest.",
     "Maintain an emergency fund of 3-6 months of expenses.",
     "Use budgeting apps to track and control spending.",
     "Learn the difference between good and bad debt.",
-    # Add more tips here...
 ]
 
-# Streamlit page config
-st.set_page_config(page_title="FinBot - Your Finance Assistant", layout="wide")
-
-# Neon blue theme CSS
-neon_css = """
-<style>
-    body, .main {
-        background-color: #0d1117;
-        color: #c0f7ff;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-    h1, h2, h3, h4, h5 {
-        color: #00ffff;
-        font-weight: 700;
-    }
-    .stButton>button {
-        background-color: #00ffff;
-        color: #000000;
-        font-weight: 600;
-        border-radius: 12px;
-        box-shadow: 0 0 10px #00ffff;
-        transition: 0.3s ease;
-    }
-    .stButton>button:hover {
-        background-color: #00e6e6;
-        box-shadow: 0 0 15px #00e6e6;
-    }
-    .stTextInput>div>input {
-        background-color: #121821;
-        color: #c0f7ff;
-        border-radius: 8px;
-        border: 1px solid #00ffff;
-    }
-    .stSelectbox>div>div>div>select {
-        background-color: #121821;
-        color: #c0f7ff;
-        border-radius: 8px;
-        border: 1px solid #00ffff;
-    }
-</style>
-"""
-st.markdown(neon_css, unsafe_allow_html=True)
-
-# Title
-st.title("💸 FinBot - Your Finance Assistant")
-
-# Tabs
-tabs = st.tabs(["🤖 AI Chatbot", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
+fun_facts = [
+    "The first credit card was introduced in 1950 by Diners Club.",
+    "Compound interest was described by Einstein as the 8th wonder of the world.",
+    "The average millionaire has 7 streams of income.",
+    "Roth IRA accounts allow for tax-free withdrawals in retirement.",
+    "UPI handles over 10 billion transactions monthly!",
+]
 
 # -------- AI Chatbot Tab --------
 with tabs[0]:
     st.subheader("Ask your personal finance questions!")
-    user_question = st.text_area("Enter your question or topic here:", height=120)
+    user_question = st.text_area("Enter your question:", height=120)
     if st.button("Get AI Advice"):
         if user_question.strip():
             with st.spinner("Thinking..."):
@@ -113,20 +127,42 @@ with tabs[0]:
                 except Exception as e:
                     st.error(f"API Error: {e}")
         else:
-            st.warning("Please enter a question first.")
+            st.warning("Please enter a question.")
+
+# -------- PDF Summarizer Tab --------
+with tabs[1]:
+    st.subheader("📄 Upload and Summarize PDF")
+    uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
+    if uploaded_file:
+        try:
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() or ""
+            if len(text.strip()) == 0:
+                st.warning("No readable text found in the PDF.")
+            else:
+                if st.button("Summarize PDF"):
+                    with st.spinner("Summarizing..."):
+                        try:
+                            summary = call_gemini_api("Summarize this document:\n" + text[:6000])
+                            st.success(summary)
+                        except Exception as e:
+                            st.error(f"Summarization Error: {e}")
+        except Exception as e:
+            st.error(f"File processing error: {e}")
 
 # -------- Learn Finance Tab --------
-with tabs[1]:
+with tabs[2]:
     st.subheader("📚 Financial Knowledge Hub")
     if st.button("🔄 Refresh Tips"):
         random.shuffle(finance_tips)
-    for tip in finance_tips[:10]:  # show 10 tips max at a time
+    for tip in finance_tips[:10]:
         st.markdown(f"✅ {tip}")
 
 # -------- Calculators Tab --------
-with tabs[2]:
+with tabs[3]:
     st.subheader("📊 Financial Calculators")
-
     calc = st.selectbox("Choose a calculator:", ["Income Tax", "EMI", "Fixed Deposit"])
 
     if calc == "Income Tax":
@@ -161,12 +197,11 @@ with tabs[2]:
             st.success(f"Maturity Amount: ₹{maturity:,.2f}")
 
 # -------- Fun Facts Tab --------
-with tabs[3]:
+with tabs[4]:
     st.subheader("🎉 Fun Financial Facts")
     if st.button("🔄 Refresh Fact"):
         st.session_state["fact"] = random.choice(fun_facts)
     if "fact" not in st.session_state:
         st.session_state["fact"] = random.choice(fun_facts)
     st.info(st.session_state["fact"])
-
-    st.caption("🔁 Click refresh to see more!") use the models and hugging face develop a code for me and also use all three ibm models
+    st.caption("🔁 Click refresh to see more!")
