@@ -2,42 +2,16 @@ import streamlit as st
 import requests
 import random
 import PyPDF2
-import io
 
-# Load Gemini API key
+# Load Gemini API key from secrets.toml
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 
-# Gemini API headers
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {GEMINI_API_KEY}"
-}
+# Set page config
+st.set_page_config(page_title="💸 FinBot - Your Finance Assistant", layout="wide")
 
-# Function to call Gemini API
-def call_gemini_api(prompt):
-    body = {
-        "prompt": {
-            "messages": [
-                {"author": "user", "content": {"text": prompt}}
-            ]
-        },
-        "temperature": 0.7,
-        "maxOutputTokens": 512
-    }
-    response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage",
-        headers=headers,
-        json=body,
-        timeout=30
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data["candidates"][0]["message"]["content"]["text"]
-
-# Theme toggle
+# --- Theme Toggle ---
 theme = st.sidebar.radio("🌗 Choose Theme:", ["Neon Dark", "Neon Light"])
 
-# Apply theme
 if theme == "Neon Dark":
     neon_css = """
     <style>
@@ -87,17 +61,30 @@ else:
         }
     </style>
     """
-
 st.markdown(neon_css, unsafe_allow_html=True)
 
-# Page setup
-st.set_page_config(page_title="FinBot - Your Finance Assistant", layout="wide")
-st.title("💸 FinBot - Your Finance Assistant")
+# --- Gemini API Call ---
+def call_gemini_api(prompt):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {GEMINI_API_KEY}"
+    }
+    body = {
+        "prompt": {
+            "messages": [
+                {"author": "user", "content": {"text": prompt}}
+            ]
+        },
+        "temperature": 0.7,
+        "maxOutputTokens": 512
+    }
+    url = "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage"
+    response = requests.post(url, headers=headers, json=body)
+    response.raise_for_status()
+    data = response.json()
+    return data["candidates"][0]["message"]["content"]["text"]
 
-# Tabs
-tabs = st.tabs(["🤖 AI Chatbot", "📄 PDF Summarizer", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
-
-# Financial tips and facts
+# --- Data ---
 finance_tips = [
     "Always spend less than you earn.",
     "Invest early to take advantage of compound interest.",
@@ -114,7 +101,13 @@ fun_facts = [
     "UPI handles over 10 billion transactions monthly!",
 ]
 
-# -------- AI Chatbot Tab --------
+# --- Header ---
+st.title("💸 FinBot - Your Finance Assistant")
+
+# --- Tabs ---
+tabs = st.tabs(["🤖 AI Chatbot", "📄 PDF Summarizer", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
+
+# --- 🤖 AI Chatbot ---
 with tabs[0]:
     st.subheader("Ask your personal finance questions!")
     user_question = st.text_area("Enter your question:", height=120)
@@ -129,7 +122,7 @@ with tabs[0]:
         else:
             st.warning("Please enter a question.")
 
-# -------- PDF Summarizer Tab --------
+# --- 📄 PDF Summarizer ---
 with tabs[1]:
     st.subheader("📄 Upload and Summarize PDF")
     uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
@@ -138,8 +131,10 @@ with tabs[1]:
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
             text = ""
             for page in pdf_reader.pages:
-                text += page.extract_text() or ""
-            if len(text.strip()) == 0:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted
+            if not text.strip():
                 st.warning("No readable text found in the PDF.")
             else:
                 if st.button("Summarize PDF"):
@@ -152,7 +147,7 @@ with tabs[1]:
         except Exception as e:
             st.error(f"File processing error: {e}")
 
-# -------- Learn Finance Tab --------
+# --- 📚 Learn Finance ---
 with tabs[2]:
     st.subheader("📚 Financial Knowledge Hub")
     if st.button("🔄 Refresh Tips"):
@@ -160,7 +155,7 @@ with tabs[2]:
     for tip in finance_tips[:10]:
         st.markdown(f"✅ {tip}")
 
-# -------- Calculators Tab --------
+# --- 📊 Calculators ---
 with tabs[3]:
     st.subheader("📊 Financial Calculators")
     calc = st.selectbox("Choose a calculator:", ["Income Tax", "EMI", "Fixed Deposit"])
@@ -184,8 +179,8 @@ with tabs[3]:
         interest_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
         tenure_months = st.number_input("Tenure (Months)", min_value=1)
         if st.button("Calculate EMI", key="emi"):
-            monthly_rate = interest_rate / (12 * 100)
-            emi = (loan_amount * monthly_rate * ((1 + monthly_rate) ** tenure_months)) / (((1 + monthly_rate) ** tenure_months) - 1)
+            r = interest_rate / (12 * 100)
+            emi = (loan_amount * r * ((1 + r) ** tenure_months)) / (((1 + r) ** tenure_months) - 1)
             st.success(f"Monthly EMI: ₹{emi:,.2f}")
 
     elif calc == "Fixed Deposit":
@@ -196,7 +191,7 @@ with tabs[3]:
             maturity = principal * ((1 + fd_rate / 100) ** duration_years)
             st.success(f"Maturity Amount: ₹{maturity:,.2f}")
 
-# -------- Fun Facts Tab --------
+# --- 🎉 Fun Facts ---
 with tabs[4]:
     st.subheader("🎉 Fun Financial Facts")
     if st.button("🔄 Refresh Fact"):
