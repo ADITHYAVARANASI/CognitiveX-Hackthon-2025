@@ -1,154 +1,173 @@
 import streamlit as st
-import os
 import requests
-import json
-import google.generativeai as genai
 import random
 
-# Load API keys from Streamlit Cloud secrets
+# Load Gemini API key from Streamlit secrets
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-NEWSDATA_API_KEY = st.secrets["NEWSDATA_API_KEY"]
-genai.configure(api_key=GEMINI_API_KEY)
 
-# Page configuration
+# Headers for Gemini API
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": f"Bearer {GEMINI_API_KEY}"
+}
+
+def call_gemini_api(prompt):
+    """Call Gemini chat-bison-001 model API with user prompt."""
+    body = {
+        "prompt": {
+            "messages": [
+                {"author": "user", "content": {"text": prompt}}
+            ]
+        },
+        "temperature": 0.7,
+        "maxOutputTokens": 512
+    }
+    response = requests.post(
+        "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage",
+        headers=headers,
+        json=body,
+        timeout=30
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["candidates"][0]["message"]["content"]["text"]
+
+# Financial facts and tips
+fun_facts = [
+    "The first credit card was introduced in 1950 by Diners Club.",
+    "Compound interest was described by Einstein as the 8th wonder of the world.",
+    "The average millionaire has 7 streams of income.",
+    "Roth IRA accounts allow for tax-free withdrawals in retirement.",
+    "UPI handles over 10 billion transactions monthly!",
+    # Add more facts here...
+]
+
+finance_tips = [
+    "Always spend less than you earn.",
+    "Invest early to take advantage of compound interest.",
+    "Maintain an emergency fund of 3-6 months of expenses.",
+    "Use budgeting apps to track and control spending.",
+    "Learn the difference between good and bad debt.",
+    # Add more tips here...
+]
+
+# Streamlit page config
 st.set_page_config(page_title="FinBot - Your Finance Assistant", layout="wide")
 
-# Theme toggle
-theme = st.sidebar.radio("Choose Theme", ["🌞 Light", "🌚 Dark"])
+# Neon blue theme CSS
 neon_css = """
-    <style>
-    html, body, [class*="css"]  {
-        font-family: 'Segoe UI', sans-serif;
-        background-color: %s;
-        color: %s;
+<style>
+    body, .main {
+        background-color: #0d1117;
+        color: #c0f7ff;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    .main-container {
-        padding: 2rem;
-        background: linear-gradient(145deg, %s, %s);
-        border-radius: 20px;
-        box-shadow: 0 0 25px rgba(0,255,200,0.2);
-        margin: 20px;
+    h1, h2, h3, h4, h5 {
+        color: #00ffff;
+        font-weight: 700;
     }
     .stButton>button {
-        background-color: #0ff;
-        color: black;
+        background-color: #00ffff;
+        color: #000000;
         font-weight: 600;
         border-radius: 12px;
-        box-shadow: 0 0 8px #0ff;
+        box-shadow: 0 0 10px #00ffff;
         transition: 0.3s ease;
     }
     .stButton>button:hover {
-        background-color: #00f7ff;
-        box-shadow: 0 0 12px #00f7ff;
-        color: black;
+        background-color: #00e6e6;
+        box-shadow: 0 0 15px #00e6e6;
     }
-    .stTabs [data-baseweb="tab"] {
-        font-weight: 700;
-        font-size: 18px;
-        padding: 10px;
+    .stTextInput>div>input {
+        background-color: #121821;
+        color: #c0f7ff;
+        border-radius: 8px;
+        border: 1px solid #00ffff;
     }
-    .stTabs [aria-selected="true"] {
-        background-color: #0ff;
-        color: black;
-        border-radius: 12px;
+    .stSelectbox>div>div>div>select {
+        background-color: #121821;
+        color: #c0f7ff;
+        border-radius: 8px;
+        border: 1px solid #00ffff;
     }
-    </style>
-""" % (
-    "#0d0d0d" if theme == "🌚 Dark" else "#f5faff",
-    "#f0f0f0" if theme == "🌚 Dark" else "#000000",
-    "#121212" if theme == "🌚 Dark" else "#ffffff",
-    "#1a1a1a" if theme == "🌚 Dark" else "#f0f4ff"
-)
+</style>
+"""
 st.markdown(neon_css, unsafe_allow_html=True)
-st.markdown("<div class='main-container'>", unsafe_allow_html=True)
 
-# Logo & Title
-st.image("finbot_logo.png", width=60)
-st.markdown("<h1 style='color:#0ff; font-weight:bold;'>FinBot - Your Finance Assistant</h1>", unsafe_allow_html=True)
+# Title
+st.title("💸 FinBot - Your Finance Assistant")
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Tools", "🤖 AI Advisor", "📰 News", "🎓 Fun Facts"])
+tabs = st.tabs(["🤖 AI Chatbot", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
 
-# Tab 1: Tools
-with tab1:
-    st.subheader("📌 Finance Tools")
+# -------- AI Chatbot Tab --------
+with tabs[0]:
+    st.subheader("Ask your personal finance questions!")
+    user_question = st.text_area("Enter your question or topic here:", height=120)
+    if st.button("Get AI Advice"):
+        if user_question.strip():
+            with st.spinner("Thinking..."):
+                try:
+                    answer = call_gemini_api(user_question)
+                    st.success(answer)
+                except Exception as e:
+                    st.error(f"API Error: {e}")
+        else:
+            st.warning("Please enter a question first.")
 
-    with st.expander("💰 Income Tax Calculator"):
+# -------- Learn Finance Tab --------
+with tabs[1]:
+    st.subheader("📚 Financial Knowledge Hub")
+    if st.button("🔄 Refresh Tips"):
+        random.shuffle(finance_tips)
+    for tip in finance_tips[:10]:  # show 10 tips max at a time
+        st.markdown(f"✅ {tip}")
+
+# -------- Calculators Tab --------
+with tabs[2]:
+    st.subheader("📊 Financial Calculators")
+
+    calc = st.selectbox("Choose a calculator:", ["Income Tax", "EMI", "Fixed Deposit"])
+
+    if calc == "Income Tax":
         income = st.number_input("Enter your annual income (₹)", min_value=0)
-        if st.button("Calculate Tax"):
+        if st.button("Calculate Tax", key="tax"):
             tax = 0
             if income <= 250000:
                 tax = 0
             elif income <= 500000:
                 tax = (income - 250000) * 0.05
             elif income <= 1000000:
-                tax = (250000 * 0.05) + (income - 500000) * 0.2
+                tax = 12500 + (income - 500000) * 0.2
             else:
-                tax = (250000 * 0.05) + (500000 * 0.2) + (income - 1000000) * 0.3
+                tax = 112500 + (income - 1000000) * 0.3
             st.success(f"Estimated Tax: ₹{tax:,.2f}")
 
-    with st.expander("🏦 EMI Calculator"):
-        loan = st.number_input("Loan Amount (₹)", min_value=0)
-        rate = st.number_input("Interest Rate (%)", min_value=0.0)
-        tenure = st.number_input("Tenure (months)", min_value=1)
-        if st.button("Calculate EMI"):
-            monthly_rate = rate / (12 * 100)
-            emi = loan * monthly_rate * ((1 + monthly_rate) ** tenure) / (((1 + monthly_rate) ** tenure) - 1)
-            st.info(f"Monthly EMI: ₹{emi:,.2f}")
+    elif calc == "EMI":
+        loan_amount = st.number_input("Loan Amount (₹)", min_value=0)
+        interest_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
+        tenure_months = st.number_input("Tenure (Months)", min_value=1)
+        if st.button("Calculate EMI", key="emi"):
+            monthly_rate = interest_rate / (12 * 100)
+            emi = (loan_amount * monthly_rate * ((1 + monthly_rate) ** tenure_months)) / (((1 + monthly_rate) ** tenure_months) - 1)
+            st.success(f"Monthly EMI: ₹{emi:,.2f}")
 
-    with st.expander("📈 FD Returns"):
-        fd_amount = st.number_input("FD Amount (₹)", min_value=0)
-        fd_rate = st.number_input("Annual FD Rate (%)", value=6.5)
-        fd_years = st.number_input("Duration (years)", value=1)
-        if st.button("Calculate FD Returns"):
-            maturity = fd_amount * ((1 + fd_rate / 100) ** fd_years)
-            st.info(f"Maturity Amount: ₹{maturity:,.2f}")
+    elif calc == "Fixed Deposit":
+        principal = st.number_input("Principal Amount (₹)", min_value=0)
+        fd_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0, value=6.5)
+        duration_years = st.number_input("Duration (Years)", min_value=1)
+        if st.button("Calculate Maturity", key="fd"):
+            maturity = principal * ((1 + fd_rate / 100) ** duration_years)
+            st.success(f"Maturity Amount: ₹{maturity:,.2f}")
 
-# Tab 2: AI Advisor
-with tab2:
-    st.subheader("🤖 AI Financial Advisor & Summarizer")
-    choice = st.selectbox("Choose a tool", ["Investment Advisor", "Financial Statement Summarizer", "Legal Document Summarizer"])
-    user_input = st.text_area("Enter your query or paste document here")
-    if st.button("Get AI Advice"):
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        prompt_map = {
-            "Investment Advisor": f"Act as an Indian financial investment advisor. Give suggestions for: {user_input}",
-            "Financial Statement Summarizer": f"Summarize this financial document in simple Indian terms: {user_input}",
-            "Legal Document Summarizer": f"Summarize this Indian financial legal document: {user_input}"
-        }
-        response = model.generate_content(prompt_map[choice])
-        st.success(response.text)
+# -------- Fun Facts Tab --------
+with tabs[3]:
+    st.subheader("🎉 Fun Financial Facts")
+    if st.button("🔄 Refresh Fact"):
+        st.session_state["fact"] = random.choice(fun_facts)
+    if "fact" not in st.session_state:
+        st.session_state["fact"] = random.choice(fun_facts)
+    st.info(st.session_state["fact"])
 
-# Tab 3: News
-with tab3:
-    st.subheader("📰 Latest Financial News")
-    if st.button("🔁 Refresh News"):
-        st.experimental_rerun()
-    news_url = f"https://newsdata.io/api/1/news?apikey={NEWSDATA_API_KEY}&q=finance&country=in&language=en&category=business"
-    try:
-        news_res = requests.get(news_url)
-        news_data = news_res.json().get("results", [])[:5]
-        for news in news_data:
-            st.markdown("### " + news.get("title", "No title"))
-            if news.get("image_url"):
-                st.image(news["image_url"], use_column_width=True)
-            st.markdown(news.get("description", "") or news.get("content", ""))
-            st.markdown(f"[Read more]({news.get('link')})", unsafe_allow_html=True)
-            st.markdown("---")
-    except Exception as e:
-        st.error(f"News loading failed: {e}")
+    st.caption("🔁 Click refresh to see more!")
 
-# Tab 4: Fun Facts
-with tab4:
-    st.subheader("🎓 Did You Know?")
-    facts = [
-        "Jan Dhan Yojana holds the world record for most bank accounts opened in a week.",
-        "UPI handles over 10 billion transactions monthly!",
-        "Mutual funds in India crossed ₹50 lakh crore in 2025.",
-        "India is among the top 3 fastest-growing digital banking markets.",
-        "SIPs are the most trusted long-term investment tool among Gen Z investors."
-    ]
-    if st.button("🎲 Give Me a Fact"):
-        st.info(random.choice(facts))
-
-st.markdown("</div>", unsafe_allow_html=True)
