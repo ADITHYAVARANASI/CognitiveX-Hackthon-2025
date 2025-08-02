@@ -1,137 +1,114 @@
 import streamlit as st
 import requests
 import random
+import os
+from dotenv import load_dotenv
 
-# Load Gemini API key from Streamlit secrets
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+# Load .env file
+load_dotenv()
+HF_API_KEY = os.getenv("HUGGING_FACE_API_KEY")
 
-# Headers for Gemini API
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {GEMINI_API_KEY}"
+# IBM Models (via Hugging Face)
+IBM_MODELS = {
+    "Granite 3.0 2B": "ibm-granite/granite-3.0-2b-instruct",
+    "Granite 7B": "ibm/granite-7b-instruct",
+    "Granite 3.0 8B": "ibm-granite/granite-3.0-8b-instruct"
 }
 
-def call_gemini_api(prompt):
-    """Call Gemini chat-bison-001 model API with user prompt."""
-    body = {
-        "prompt": {
-            "messages": [
-                {"author": "user", "content": {"text": prompt}}
-            ]
-        },
-        "temperature": 0.7,
-        "maxOutputTokens": 512
-    }
-    response = requests.post(
-        "https://generativelanguage.googleapis.com/v1beta2/models/chat-bison-001:generateMessage",
-        headers=headers,
-        json=body,
-        timeout=30
-    )
-    response.raise_for_status()
-    data = response.json()
-    return data["candidates"][0]["message"]["content"]["text"]
+# Headers for Hugging Face API
+headers = {
+    "Authorization": f"Bearer {HF_API_KEY}",
+    "Content-Type": "application/json"
+}
 
-# Financial facts and tips
-fun_facts = [
-    "The first credit card was introduced in 1950 by Diners Club.",
-    "Compound interest was described by Einstein as the 8th wonder of the world.",
-    "The average millionaire has 7 streams of income.",
-    "Roth IRA accounts allow for tax-free withdrawals in retirement.",
-    "UPI handles over 10 billion transactions monthly!",
-    # Add more facts here...
-]
+# Query Function
+def query_ibm_model(prompt, model_id):
+    url = f"https://api-inference.huggingface.co/models/{model_id}"
+    payload = {"inputs": prompt, "options": {"wait_for_model": True}}
 
-finance_tips = [
-    "Always spend less than you earn.",
-    "Invest early to take advantage of compound interest.",
-    "Maintain an emergency fund of 3-6 months of expenses.",
-    "Use budgeting apps to track and control spending.",
-    "Learn the difference between good and bad debt.",
-    # Add more tips here...
-]
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        if isinstance(result, list):
+            return result[0]["generated_text"]
+        elif "generated_text" in result:
+            return result["generated_text"]
+        else:
+            return str(result)
+    except Exception as e:
+        return f"❌ Error: {e}"
 
-# Streamlit page config
-st.set_page_config(page_title="FinBot - Your Finance Assistant", layout="wide")
-
-# Neon blue theme CSS
-neon_css = """
+# Neon Theme
+st.set_page_config(page_title="FinBot - IBM Hugging Face", layout="wide")
+st.markdown("""
 <style>
     body, .main {
         background-color: #0d1117;
         color: #c0f7ff;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    h1, h2, h3, h4, h5 {
+    h1, h2, h3 {
         color: #00ffff;
-        font-weight: 700;
     }
     .stButton>button {
         background-color: #00ffff;
-        color: #000000;
-        font-weight: 600;
-        border-radius: 12px;
-        box-shadow: 0 0 10px #00ffff;
-        transition: 0.3s ease;
-    }
-    .stButton>button:hover {
-        background-color: #00e6e6;
-        box-shadow: 0 0 15px #00e6e6;
-    }
-    .stTextInput>div>input {
-        background-color: #121821;
-        color: #c0f7ff;
-        border-radius: 8px;
-        border: 1px solid #00ffff;
-    }
-    .stSelectbox>div>div>div>select {
-        background-color: #121821;
-        color: #c0f7ff;
-        border-radius: 8px;
-        border: 1px solid #00ffff;
+        color: black;
+        font-weight: bold;
+        border-radius: 10px;
     }
 </style>
-"""
-st.markdown(neon_css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# Title
-st.title("💸 FinBot - Your Finance Assistant")
+# Page Title
+st.title("💸 FinBot – IBM Hugging Face Powered Finance Assistant")
 
 # Tabs
-tabs = st.tabs(["🤖 AI Chatbot", "📚 Learn Finance", "📊 Calculators", "🎉 Fun Facts"])
+tabs = st.tabs(["🤖 AI Chatbot", "📚 Finance Tips", "📊 Calculators", "🎉 Fun Facts"])
 
-# -------- AI Chatbot Tab --------
+# ---------------------- Chatbot ----------------------
 with tabs[0]:
-    st.subheader("Ask your personal finance questions!")
-    user_question = st.text_area("Enter your question or topic here:", height=120)
-    if st.button("Get AI Advice"):
-        if user_question.strip():
-            with st.spinner("Thinking..."):
-                try:
-                    answer = call_gemini_api(user_question)
-                    st.success(answer)
-                except Exception as e:
-                    st.error(f"API Error: {e}")
-        else:
-            st.warning("Please enter a question first.")
+    st.subheader("Ask Finance Questions (powered by IBM Models)")
+    user_input = st.text_area("💬 Enter your question:", height=120)
+    selected_model = st.selectbox("Choose a model:", list(IBM_MODELS.keys()))
 
-# -------- Learn Finance Tab --------
+    if st.button("Get Answer"):
+        if user_input.strip():
+            with st.spinner("Fetching response..."):
+                model_id = IBM_MODELS[selected_model]
+                reply = query_ibm_model(user_input, model_id)
+                st.success(reply)
+        else:
+            st.warning("Please enter a question.")
+
+# ---------------------- Finance Tips ----------------------
+finance_tips = [
+    "Always spend less than you earn.",
+    "Invest early to take advantage of compound interest.",
+    "Create and maintain a budget.",
+    "Keep an emergency fund worth 6 months of expenses.",
+    "Avoid unnecessary debt. Pay credit cards in full.",
+    "Track expenses with personal finance apps.",
+    "Review subscriptions annually.",
+    "Understand risk before investing.",
+    "Diversify your portfolio.",
+    "Start retirement savings early."
+]
+
 with tabs[1]:
-    st.subheader("📚 Financial Knowledge Hub")
-    if st.button("🔄 Refresh Tips"):
+    st.subheader("📚 Financial Tips & Advice")
+    if st.button("🔁 Shuffle Tips"):
         random.shuffle(finance_tips)
-    for tip in finance_tips[:10]:  # show 10 tips max at a time
+    for tip in finance_tips[:10]:
         st.markdown(f"✅ {tip}")
 
-# -------- Calculators Tab --------
+# ---------------------- Calculators ----------------------
 with tabs[2]:
     st.subheader("📊 Financial Calculators")
-
-    calc = st.selectbox("Choose a calculator:", ["Income Tax", "EMI", "Fixed Deposit"])
+    calc = st.selectbox("Select Calculator", ["Income Tax", "EMI", "Fixed Deposit"])
 
     if calc == "Income Tax":
-        income = st.number_input("Enter your annual income (₹)", min_value=0)
-        if st.button("Calculate Tax", key="tax"):
+        income = st.number_input("Enter Annual Income (₹)", min_value=0)
+        if st.button("Calculate Tax"):
             tax = 0
             if income <= 250000:
                 tax = 0
@@ -144,30 +121,35 @@ with tabs[2]:
             st.success(f"Estimated Tax: ₹{tax:,.2f}")
 
     elif calc == "EMI":
-        loan_amount = st.number_input("Loan Amount (₹)", min_value=0)
-        interest_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
-        tenure_months = st.number_input("Tenure (Months)", min_value=1)
-        if st.button("Calculate EMI", key="emi"):
-            monthly_rate = interest_rate / (12 * 100)
-            emi = (loan_amount * monthly_rate * ((1 + monthly_rate) ** tenure_months)) / (((1 + monthly_rate) ** tenure_months) - 1)
+        loan = st.number_input("Loan Amount (₹)", min_value=0)
+        rate = st.number_input("Annual Interest Rate (%)", min_value=0.0)
+        months = st.number_input("Tenure in Months", min_value=1)
+        if st.button("Calculate EMI"):
+            monthly_rate = rate / (12 * 100)
+            emi = (loan * monthly_rate * (1 + monthly_rate) ** months) / ((1 + monthly_rate) ** months - 1)
             st.success(f"Monthly EMI: ₹{emi:,.2f}")
 
     elif calc == "Fixed Deposit":
         principal = st.number_input("Principal Amount (₹)", min_value=0)
-        fd_rate = st.number_input("Annual Interest Rate (%)", min_value=0.0, value=6.5)
-        duration_years = st.number_input("Duration (Years)", min_value=1)
-        if st.button("Calculate Maturity", key="fd"):
-            maturity = principal * ((1 + fd_rate / 100) ** duration_years)
-            st.success(f"Maturity Amount: ₹{maturity:,.2f}")
+        fd_rate = st.number_input("Annual Interest Rate (%)", value=6.5)
+        years = st.number_input("Duration (Years)", min_value=1)
+        if st.button("Calculate Maturity"):
+            maturity = principal * ((1 + fd_rate / 100) ** years)
+            st.success(f"Maturity Value: ₹{maturity:,.2f}")
 
-# -------- Fun Facts Tab --------
+# ---------------------- Fun Facts ----------------------
+fun_facts = [
+    "The first credit card was introduced in 1950.",
+    "Compound interest is called the 8th wonder of the world.",
+    "Most millionaires have 7 income streams.",
+    "In India, UPI handles over 10 billion transactions monthly.",
+    "Savings of just ₹500/month can grow to ₹10L+ in 20 years (with compounding)."
+]
+
 with tabs[3]:
-    st.subheader("🎉 Fun Financial Facts")
-    if st.button("🔄 Refresh Fact"):
+    st.subheader("🎉 Fun Finance Facts")
+    if st.button("🔁 Refresh Fact"):
         st.session_state["fact"] = random.choice(fun_facts)
     if "fact" not in st.session_state:
         st.session_state["fact"] = random.choice(fun_facts)
     st.info(st.session_state["fact"])
-
-    st.caption("🔁 Click refresh to see more!")
-
